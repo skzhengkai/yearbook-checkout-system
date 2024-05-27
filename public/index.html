@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Yearbook Checkout</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+      background-color: #f5f5f5;
+      color: #333;
+    }
+
+    h1 {
+      font-size: 24px;
+      margin-bottom: 20px;
+      color: #007AFF;
+    }
+
+    p {
+      font-size: 18px;
+      margin-bottom: 20px;
+      color: #666;
+    }
+
+    .manual-entry {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    #manualInput {
+      font-size: 18px;
+      padding: 12px;
+      width: 90%;
+      max-width: 400px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .manual-entry a {
+      display: inline-block;
+      padding: 12px 24px;
+      background-color: #007AFF;
+      color: white;
+      text-decoration: none;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      transition: background-color 0.3s ease;
+    }
+
+    .manual-entry a:hover {
+      background-color: #005bb5;
+    }
+
+    .scanner {
+      margin-bottom: 20px;
+    }
+
+    video {
+      max-width: 90%;
+      height: auto;
+      border-radius: 10px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      margin-bottom: 10px;
+      border: 15px solid transparent; /* Add this line to set an initial border */
+    }
+
+
+    .controls button {
+      padding: 12px 24px;
+      background-color: #ff3b30;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    .controls button:hover {
+      background-color: #c32f27;
+    }
+
+    .message {
+      margin-top: 20px;
+      font-size: 18px;
+      font-weight: bold;
+      color: #333;
+    }
+
+    #interactive {
+      width: 100%;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+
+    .drawingBuffer {
+      max-height: 0px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Yearbook Checkout</h1>
+  <p>Scan your ID card or enter your ID code manually</p>
+  <div class="manual-entry">
+    <input type="text" id="manualInput" placeholder="Enter ID code manually" aria-label="Enter ID code manually">
+    <a href="#" id="manualEntryLink">Manual Entry</a>
+  </div>
+  <div class="scanner">
+    <div id="interactive" class="viewport"></div>
+    <div class="controls">
+      <button class="stop">Stop</button>
+    </div>
+  </div>
+  <div class="message">
+    <span id="detectedIdLabel"></span>
+    <span id="detectedIdValue"></span>
+  </div>
+  <div id="message"></div>
+
+  <audio id="successSound" src="sounds/success.mp3"></audio>
+  <audio id="failureSound" src="sounds/failed.mp3"></audio>
+
+  <script src="//code.jquery.com/jquery-1.11.0.min.js"></script>
+  <script src="//webrtc.github.io/adapter/adapter-latest.js"></script>
+  <script src="https://serratus.github.io/quaggaJS/examples/js/quagga.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      var password = prompt("Please enter the yearbook password:");
+      if (password !== "your_password") { // Replace "your_password" with the actual password
+        document.body.innerHTML = ''; // Clear the page content
+        alert("Incorrect password. Reload the page to try again.");
+      }
+    });
+  </script>
+
+  <script>
+    $(function() {
+      var App = {
+        init: function() {
+          this.initQuagga();
+        },
+        initQuagga: function() {
+          Quagga.init({
+            inputStream: {
+              name: "Live",
+              type: "LiveStream",
+              constraints: {
+                width: 640,
+                height: 480,
+                facingMode: "environment" // or user
+              }
+            },
+            locator: {
+              patchSize: "medium",
+              halfSample: true
+            },
+            numOfWorkers: 4,
+            decoder: {
+              readers: ["code_39_reader", "code_128_reader"] // Adjust to your barcode type
+            },
+            locate: true
+          }, function(err) {
+            if (err) {
+              console.log(err);
+              return;
+            }
+            Quagga.start();
+          });
+        }
+      };
+
+      App.init();
+
+      $(".stop").on("click", function() {
+        Quagga.stop();
+      });
+
+      let lastCheckedStudentId = null;
+      let lastCheckoutTime = null;
+
+      Quagga.onDetected(function(result) {
+        var code = result.codeResult.code;
+        console.log("Barcode detected and processed : [" + code + "]", result);
+
+        const detectedIdLabel = document.getElementById('detectedIdLabel');
+        const detectedIdValue = document.getElementById('detectedIdValue');
+
+        detectedIdLabel.innerText = 'Detected ID: ';
+        detectedIdValue.innerText = code;
+
+        handleCheckout(code);
+      });
+
+      function handleCheckout(studentId) {
+        const currentTime = new Date().getTime();
+        if (studentId === lastCheckedStudentId && currentTime - lastCheckoutTime < 30000) {
+          // Skip if the same ID was checked within the last 5 seconds
+          return;
+        }
+
+        lastCheckedStudentId = studentId;
+        lastCheckoutTime = currentTime;
+
+        fetch('/checkout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ studentId })
+        })
+        .then(response => response.text())
+        .then(data => {
+          document.getElementById('message').innerText = data;
+          const videoElement = document.querySelector("video");
+          if (data.includes("success")) { // Adjust this condition based on the actual success response
+            document.getElementById('successSound').play();
+            videoElement.style.borderColor = 'green'; // Highlight in green
+          } else if (data.includes("An error occurred.")) {
+            document.getElementById('failureSound').play();
+            videoElement.style.borderColor = 'yellow'; // Highlight in red
+          } else {
+            document.getElementById('failureSound').play();
+            videoElement.style.borderColor = 'red'; // Highlight in red
+          }
+          videoElement.style.borderWidth = '10px'; // Make the border thicker
+
+          setTimeout(() => {
+            videoElement.style.borderColor = 'transparent'; // Remove the border after 3 seconds
+          }, 30000);
+
+        })
+        .catch(error => {
+          document.getElementById('message').innerText = 'An error occurred. Please try again.';
+          document.getElementById('failureSound').play();
+          document.querySelector("video").style.borderColor = 'red'; // Highlight in red
+        });
+      }
+
+      const manualInput = document.getElementById('manualInput');
+      manualInput.addEventListener('keydown', function(event) {
+        if (event.key === 'Enter') {
+          const studentId = manualInput.value.trim();
+          if (studentId) {
+            handleCheckout(studentId);
+            manualInput.value = '';
+          }
+        }
+      });
+
+      const manualEntryLink = document.getElementById('manualEntryLink');
+      manualEntryLink.addEventListener('click', function(event) {
+        event.preventDefault();
+        const studentId = manualInput.value.trim();
+        if (studentId) {
+          handleCheckout(studentId);
+          manualInput.value = '';
+        }
+      });
+    });
+  </script>
+</body>
+</html>
