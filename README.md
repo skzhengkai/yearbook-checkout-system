@@ -9,7 +9,6 @@ Welcome to the Yearbook Checkout System! This application allows students to cla
 - [Installation](#installation)
 - [Usage](#usage)
 - [Endpoints](#endpoints)
-- [File Structure](#file-structure)
 - [Contributing](#contributing)
 - [License](#license)
 
